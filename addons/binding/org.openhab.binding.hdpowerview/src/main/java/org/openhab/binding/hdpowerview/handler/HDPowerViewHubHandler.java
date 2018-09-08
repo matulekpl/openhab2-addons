@@ -6,13 +6,6 @@
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  */
-/**
-e * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
- */
 package org.openhab.binding.hdpowerview.handler;
 
 import java.io.IOException;
@@ -58,7 +51,7 @@ import com.google.gson.JsonParseException;
  */
 public class HDPowerViewHubHandler extends BaseBridgeHandler {
 
-    private Logger logger = LoggerFactory.getLogger(HDPowerViewHubHandler.class);
+    private final Logger logger = LoggerFactory.getLogger(HDPowerViewHubHandler.class);
 
     private long refreshInterval;
 
@@ -123,7 +116,7 @@ public class HDPowerViewHubHandler extends BaseBridgeHandler {
             pollFuture.cancel(false);
         }
         logger.debug("Scheduling poll for 500ms out, then every {} ms", refreshInterval);
-        pollFuture = scheduler.scheduleWithFixedDelay(pollingRunnable, 500, refreshInterval, TimeUnit.MILLISECONDS);
+        pollFuture = scheduler.scheduleWithFixedDelay(this::poll, 500, refreshInterval, TimeUnit.MILLISECONDS);
     }
 
     private synchronized void stopPoll() {
@@ -200,7 +193,6 @@ public class HDPowerViewHubHandler extends BaseBridgeHandler {
                 allChannels.removeAll(channels.values());
                 updateThing(editThing().withChannels(allChannels).build());
             }
-
         } else {
             logger.warn("No response to scene poll");
         }
@@ -227,14 +219,5 @@ public class HDPowerViewHubHandler extends BaseBridgeHandler {
         }
         return ret;
     }
-
-    private Runnable pollingRunnable = new Runnable() {
-
-        @Override
-        public void run() {
-            poll();
-        }
-
-    };
 
 }

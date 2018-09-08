@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  */
 public class KeypadThingHandler extends DSCAlarmBaseThingHandler {
 
-    private Logger logger = LoggerFactory.getLogger(KeypadThingHandler.class);
+    private final Logger logger = LoggerFactory.getLogger(KeypadThingHandler.class);
 
     /**
      * Constructor.
@@ -45,7 +45,6 @@ public class KeypadThingHandler extends DSCAlarmBaseThingHandler {
     @Override
     public void updateChannel(ChannelUID channelUID, int state, String description) {
         logger.debug("updateChannel(): Keypad Channel UID: {}", channelUID);
-
         if (channelUID != null) {
             switch (channelUID.getId()) {
                 case KEYPAD_READY_LED:
@@ -112,7 +111,6 @@ public class KeypadThingHandler extends DSCAlarmBaseThingHandler {
             channel = channelTypes[i];
 
             if (channel != "") {
-
                 channelUID = new ChannelUID(getThing().getUID(), channel);
 
                 switch (dscAlarmCode) {
@@ -133,7 +131,6 @@ public class KeypadThingHandler extends DSCAlarmBaseThingHandler {
 
     @Override
     public void dscAlarmEventReceived(EventObject event, Thing thing) {
-
         if (thing != null) {
             if (getThing() == thing) {
                 DSCAlarmEvent dscAlarmEvent = (DSCAlarmEvent) event;
@@ -151,8 +148,12 @@ public class KeypadThingHandler extends DSCAlarmBaseThingHandler {
                     case KeypadLEDFlashState: /* 511 */
                         keypadLEDStateEventHandler(event);
                         break;
-                    case LCDUpdate:
-                    case LCDCursor:
+                    case LCDUpdate: /* 901 */
+                        channelUID = new ChannelUID(getThing().getUID(), KEYPAD_LCD_UPDATE);
+                        updateChannel(channelUID, 0, dscAlarmMessageData);
+                        break;
+                    case LCDCursor: /* 902 */
+                        channelUID = new ChannelUID(getThing().getUID(), KEYPAD_LCD_CURSOR);
                         updateChannel(channelUID, 0, dscAlarmMessageData);
                         break;
                     case LEDStatus: /* 903 */

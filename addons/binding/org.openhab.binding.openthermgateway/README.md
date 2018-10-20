@@ -84,7 +84,6 @@ Switch BurnerActive "Burner active" <switch> {channel="openthermgateway:otgw:1:f
 Number RelativeModulationLevel "Relative modulation level [%.1f %%]" {channel="openthermgateway:otgw:1:modulevel"}
 Number MaximumRelativeModulationLevel "Maximum relative modulation level [%.1f %%]" {channel="openthermgateway:otgw:1:maxrelmdulevel"}
 Text GenericCommandChannel "Generic command channel" {channel="openthermgateway:otgw:1:genericcommand"}
-
 ```
 
 ### demo.sitemap

@@ -17,6 +17,7 @@
   <name>openHAB Bindings</name>
 
   <modules>
+  <!--
     <module>org.openhab.binding.airquality</module>
     <module>org.openhab.binding.airvisualnode</module>
     <module>org.openhab.binding.allplay</module>
@@ -97,8 +98,16 @@
     <module>org.openhab.binding.onewiregpio</module>
     <module>org.openhab.binding.onkyo</module>
     <module>org.openhab.binding.opensprinkler</module>
+<<<<<<< HEAD
+	-->
+	
+	<module>org.openhab.binding.openthermgateway</module>
+    <!--
+	<module>org.openhab.binding.orvibo</module>
+=======
     <module>org.openhab.binding.openuv</module>
     <module>org.openhab.binding.orvibo</module>
+>>>>>>> df385659e06a9fb2a72750596fbc646272cf1a17
     <module>org.openhab.binding.pentair</module>
     <module>org.openhab.binding.phc</module>
     <module>org.openhab.binding.pioneeravr</module>
@@ -146,5 +155,6 @@
     <module>org.openhab.binding.yeelight</module>
     <module>org.openhab.binding.zoneminder</module>
     <module>org.openhab.binding.zway</module>
+	-->
   </modules>
 </project>

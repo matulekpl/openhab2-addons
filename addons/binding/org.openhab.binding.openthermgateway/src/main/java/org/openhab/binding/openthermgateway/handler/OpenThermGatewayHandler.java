@@ -12,8 +12,11 @@
  */
 package org.openhab.binding.openthermgateway.handler;
 
+import java.util.concurrent.TimeUnit;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.smarthome.core.library.types.QuantityType;
 import org.eclipse.smarthome.core.thing.ChannelUID;
 import org.eclipse.smarthome.core.thing.Thing;
 import org.eclipse.smarthome.core.thing.ThingStatus;
@@ -75,7 +78,13 @@ public class OpenThermGatewayHandler extends BaseThingHandler implements OpenThe
                 String channel = channelUID.getId();
                 String code = getGatewayCodeFromChannel(channel);
 
-                GatewayCommand gatewayCommand = GatewayCommand.parse(code, command.toFullString());
+                GatewayCommand gatewayCommand;
+                if (command instanceof QuantityType) {
+                    gatewayCommand = GatewayCommand.parse(code,
+                            Double.toString(((QuantityType) command).doubleValue()));
+                } else {
+                    gatewayCommand = GatewayCommand.parse(code, command.toFullString());
+                }
 
                 if (gatewayCommand != null && checkConnection()) {
                     connector.sendCommand(gatewayCommand);
@@ -86,20 +95,38 @@ public class OpenThermGatewayHandler extends BaseThingHandler implements OpenThe
         }
     }
 
+    boolean connecting = false;
+
     @Override
     public void connecting() {
+        connecting = true;
         updateStatus(ThingStatus.OFFLINE);
     }
 
     @Override
     public void connected() {
+        connecting = false;
         updateStatus(ThingStatus.ONLINE);
     }
 
     @Override
     public void disconnected() {
+        connecting = false;
         try {
             updateStatus(ThingStatus.OFFLINE);
+
+            // retry connection if disconnect is not explicitly requested
+            if (!explicitDisconnect) {
+                scheduler.schedule(new Runnable() {
+
+                    @Override
+                    public void run() {
+                        if (connector != null && !connecting && !connector.isConnected()) {
+                            connect();
+                        }
+                    }
+                }, config.connectionRetryInterval * 1000, TimeUnit.MILLISECONDS);
+            }
         } catch (IllegalStateException ex) {
         }
     }
@@ -160,6 +187,8 @@ public class OpenThermGatewayHandler extends BaseThingHandler implements OpenThe
     @Override
     public void log(LogLevel loglevel, String message, Throwable t) {
         switch (loglevel) {
+            case Trace:
+                logger.trace(message, t);
             case Debug:
                 logger.debug(message, t);
                 break;
@@ -180,6 +209,9 @@ public class OpenThermGatewayHandler extends BaseThingHandler implements OpenThe
     @Override
     public void log(LogLevel loglevel, String message) {
         switch (loglevel) {
+            case Trace:
+                logger.trace(message);
+                break;
             case Debug:
                 logger.debug(message);
                 break;
@@ -224,6 +256,7 @@ public class OpenThermGatewayHandler extends BaseThingHandler implements OpenThe
 
             logger.info("Starting OpenTherm Gateway connector");
 
+            explicitDisconnect = false;
             // TODO: support different kinds of connectors, such as USB, serial port
             connector = new OpenThermGatewaySocketConnector(this, config.ipaddress, config.port);
             new Thread(connector).start();
@@ -238,10 +271,14 @@ public class OpenThermGatewayHandler extends BaseThingHandler implements OpenThe
         return false;
     }
 
+    boolean explicitDisconnect = false;
+
     private synchronized void disconnect() {
         if (connector != null) {
             if (connector.isConnected()) {
                 logger.info("Stopping OpenTherm Gateway connector");
+
+                explicitDisconnect = true;
                 connector.stop();
             }
 

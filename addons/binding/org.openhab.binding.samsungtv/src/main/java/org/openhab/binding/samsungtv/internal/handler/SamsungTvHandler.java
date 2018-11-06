@@ -11,8 +11,8 @@ package org.openhab.binding.samsungtv.internal.handler;
 import static org.openhab.binding.samsungtv.internal.SamsungTvBindingConstants.*;
 
 import java.util.Collection;
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNull;
@@ -67,10 +67,13 @@ public class SamsungTvHandler extends BaseThingHandler implements DiscoveryListe
     private ThingUID upnpThingUID = null;
 
     /* Samsung TV services */
-    private final List<SamsungTvService> services = new CopyOnWriteArrayList<>();
+    private final Set<SamsungTvService> services = new CopyOnWriteArraySet<>();
 
     /* Store powerState to be able to restore upon new link */
     private boolean powerState = false;
+
+    /* Store if art mode is supported to be able to skip switchign power state to ON during initialization */
+    boolean artModeIsSupported = false;
 
     public SamsungTvHandler(Thing thing, UpnpIOService upnpIOService, DiscoveryServiceRegistry discoveryServiceRegistry,
             UpnpService upnpService) {
@@ -186,24 +189,31 @@ public class SamsungTvHandler extends BaseThingHandler implements DiscoveryListe
     private synchronized void putOnline() {
         setPowerState(true);
         updateStatus(ThingStatus.ONLINE);
-        updateState(POWER, OnOffType.ON);
+
+        RemoteControllerService service = (RemoteControllerService) findServiceInstance(
+                RemoteControllerService.SERVICE_NAME);
+        if (!artModeIsSupported) {
+            updateState(POWER, OnOffType.ON);
+        }
     }
 
     private synchronized void putOffline() {
         setPowerState(false);
         updateStatus(ThingStatus.OFFLINE);
-        updateState(POWER, OnOffType.OFF);
         updateState(ART_MODE, OnOffType.OFF);
+        updateState(POWER, OnOffType.OFF);
     }
 
     @Override
     public synchronized void valueReceived(String variable, State value) {
         logger.debug("Received value '{}':'{}' for thing '{}'", variable, value, this.getThing().getUID());
 
-        updateState(variable, value);
         if (POWER.equals(variable)) {
             setPowerState(OnOffType.ON.equals(value));
+        } else if (ART_MODE.equals(variable)) {
+            artModeIsSupported = true;
         }
+        updateState(variable, value);
     }
 
     @Override
@@ -284,9 +294,12 @@ public class SamsungTvHandler extends BaseThingHandler implements DiscoveryListe
                     RemoteControllerService.SERVICE_NAME);
             if (service == null) {
                 service = RemoteControllerService.createNonUpnpService(configuration.hostName, configuration.port);
+                startService(service);
+            } else {
+                // open connection again if needed
+                service.start();
             }
 
-            startService(service);
             if (service.checkConnection()) {
                 putOnline();
             } else {

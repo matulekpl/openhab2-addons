@@ -55,6 +55,11 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
     private int port;
     private boolean upnp;
 
+    boolean power = true;
+    boolean artMode = false;
+
+    private boolean artModeSupported = false;
+
     private Set<EventListener> listeners = new CopyOnWriteArraySet<>();
 
     private RemoteControllerService(String host, int port, boolean upnp) {
@@ -117,6 +122,7 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
             // will not reach this if exception thrown in openConnection
             remoteController = remoteLegacy;
             logger.info("Using legacy remote interface");
+            artModeSupported = false;
         } catch (RemoteControllerException ignore) {
         }
 
@@ -198,7 +204,7 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
                         // send key only to toggle state when power = off
                         if (!power) {
                             if (OnOffType.ON.equals(command)) {
-                                if (!artmode) {
+                                if (!artMode) {
                                     sendKeyCode(KeyCode.KEY_POWER);
                                 }
                             } else {
@@ -366,16 +372,21 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
         }
     }
 
-    boolean power = true;
-    boolean artmode = false;
-
     @Override
     public void powerUpdated(boolean on, boolean artmode) {
+        artModeSupported = true;
         power = on;
-        this.artmode = artmode;
+        this.artMode = artmode;
+
         for (EventListener listener : listeners) {
-            listener.valueReceived(POWER, on ? OnOffType.ON : OnOffType.OFF);
-            listener.valueReceived(ART_MODE, artmode ? OnOffType.ON : OnOffType.OFF);
+            // order of state updates is important to prevent extraneous transitions in overall state
+            if (on) {
+                listener.valueReceived(POWER, on ? OnOffType.ON : OnOffType.OFF);
+                listener.valueReceived(ART_MODE, artmode ? OnOffType.ON : OnOffType.OFF);
+            } else {
+                listener.valueReceived(ART_MODE, artmode ? OnOffType.ON : OnOffType.OFF);
+                listener.valueReceived(POWER, on ? OnOffType.ON : OnOffType.OFF);
+            }
         }
     }
 
@@ -389,6 +400,10 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
             logger.warn("Error in connection close: {}", e.getMessage());
         }
         remoteController = null;
+    }
+
+    public boolean isArtModeSupported() {
+        return artModeSupported;
     }
 
 }

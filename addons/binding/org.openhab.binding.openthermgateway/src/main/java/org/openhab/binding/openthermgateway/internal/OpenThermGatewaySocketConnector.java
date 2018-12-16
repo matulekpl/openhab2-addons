@@ -214,7 +214,8 @@ public class OpenThermGatewaySocketConnector implements OpenThermGatewayConnecto
             }
         }
 
-        if (msg.getMessageType() == MessageType.ReadAck || msg.getMessageType() == MessageType.WriteData) {
+        if ((msg.getCode().equals("B") && msg.getMessageType() == MessageType.ReadAck)
+                || (msg.getCode().equals("T") && msg.getMessageType() == MessageType.WriteData)) {
             receiveMessage(msg);
         }
     }

@@ -38,6 +38,7 @@ The OpenTherm Gateway supports the following channels:
 - Temporary room setpoint override
 - Constant room setpoint override
 - Control setpoint
+- Control setpoint override
 - Domestic hot water temperature
 - Domestic hot water setpoint
 - Domestic hot water setpoint override
@@ -69,6 +70,7 @@ Number RoomSetpoint "Room setpoint [%.1f °C]" <temperature> {channel="opentherm
 Number TemporaryRoomSetpointOverride "Temporary room setpoint override [%.1f °C]" <temperature> {channel="openthermgateway:otgw:1:temperaturetemporary"}
 Number ConstantRoomSetpointOverride "Constant room setpoint override [%.1f °C]" <temperature> {channel="openthermgateway:otgw:1:temperatureconstant"}
 Number ControlSetpoint "Control setpoint [%.1f °C]" <temperature> {channel="openthermgateway:otgw:1:controlsetpoint"}
+Number OverrideControlSetpoint "Control setpoint override[%.1f °C]" <temperature> {channel="openthermgateway:otgw:1:overridecontrolsetpoint"}
 Number DomesticHotWaterTemperature "Domestic hot water temperature [%.1f °C]" <temperature> {channel="openthermgateway:otgw:1:dhwtemp"}
 Number DomesticHotWaterSetpoint "Domestic hot water setpoint [%.1f °C]" <temperature> {channel="openthermgateway:otgw:1:tdhwset"}
 Number DomesticHotWaterSetpointOverride "Domestic hot water setpoint override [%.1f °C]" <temperature> {channel="openthermgateway:otgw:1:overridedhwsetpoint"}

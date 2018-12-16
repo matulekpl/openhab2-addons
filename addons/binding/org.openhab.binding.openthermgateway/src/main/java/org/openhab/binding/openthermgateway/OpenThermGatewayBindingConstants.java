@@ -38,6 +38,7 @@ public class OpenThermGatewayBindingConstants {
     public static final String CHANNEL_OVERRIDE_SETPOINT_TEMPORARY = "temperaturetemporary";
     public static final String CHANNEL_OVERRIDE_SETPOINT_CONSTANT = "temperatureconstant";
     public static final String CHANNEL_OVERRIDE_DHW_SETPOINT = "overridedhwsetpoint";
+    public static final String CHANNEL_OVERRIDE_CENTRAL_HEATING_WATER_SETPOINT = "overridecontrolsetpoint";
 
     public static final String CHANNEL_ROOM_TEMPERATURE = "roomtemp";
     public static final String CHANNEL_ROOM_SETPOINT = "roomsetpoint";

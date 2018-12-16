@@ -296,6 +296,8 @@ public class OpenThermGatewayHandler extends BaseThingHandler implements OpenThe
                 return GatewayCommandCode.TemperatureOutside;
             case OpenThermGatewayBindingConstants.CHANNEL_OVERRIDE_DHW_SETPOINT:
                 return GatewayCommandCode.SetpointWater;
+            case OpenThermGatewayBindingConstants.CHANNEL_OVERRIDE_CENTRAL_HEATING_WATER_SETPOINT:
+                return GatewayCommandCode.ControlSetpoint;
             case OpenThermGatewayBindingConstants.CHANNEL_SEND_COMMAND:
                 return "";
             default:

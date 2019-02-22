@@ -8,9 +8,10 @@
  */
 package org.openhab.voice.googletts.internal;
 
-import org.eclipse.smarthome.core.voice.Voice;
-
 import java.util.Locale;
+
+import org.eclipse.smarthome.core.voice.Voice;
+import org.openhab.voice.googletts.internal.protocol.SsmlVoiceGender;
 
 /**
  * Implementation of the Voice interface for Google Cloud TTS Service.
@@ -32,7 +33,7 @@ public class GoogleTTSVoice implements Voice {
     /**
      * Gender
      */
-    private final Integer ssmlGender;
+    private final String ssmlGender;
 
     /**
      * Constructs a Google Cloud TTS Voice for the passed data
@@ -41,25 +42,10 @@ public class GoogleTTSVoice implements Voice {
      * @param label The label of the voice
      * @param ssmlGender Voice gender
      */
-    GoogleTTSVoice(Locale locale, String label, Integer ssmlGender) {
+    GoogleTTSVoice(Locale locale, String label, String ssmlGender) {
         this.locale = locale;
         this.ssmlGender = ssmlGender;
         this.label = label;
-    }
-
-    /**
-     * Copy constructor
-     *
-     * @param voice Voice instance
-     */
-    GoogleTTSVoice(Voice voice) {
-        this.locale = voice.getLocale();
-        this.label = voice.getLabel();
-        if (voice instanceof GoogleTTSVoice) {
-            this.ssmlGender = ((GoogleTTSVoice) voice).getSsmlGender();
-        } else {
-            this.ssmlGender = null;
-        }
     }
 
     /**
@@ -69,8 +55,16 @@ public class GoogleTTSVoice implements Voice {
      */
     @Override
     public String getUID() {
-        String voiceName = label.replaceAll("[^a-zA-Z0-9_]", "");
-        return "googletts:" + voiceName;
+        return "googletts:" + getTechnicalName();
+    }
+
+    /**
+     * Technical name of the voice.
+     *
+     * @return A String voice technical name
+     */
+    String getTechnicalName() {
+        return label.replaceAll("[^a-zA-Z0-9_]", "");
     }
 
     /**
@@ -94,9 +88,9 @@ public class GoogleTTSVoice implements Voice {
     /**
      * The voice gender.
      *
-     * @return Gender: 1 - male, 2 - female, 3 - neutral
+     * @return {@link SsmlVoiceGender} enum name.
      */
-    Integer getSsmlGender() {
+    String getSsmlGender() {
         return ssmlGender;
     }
 }

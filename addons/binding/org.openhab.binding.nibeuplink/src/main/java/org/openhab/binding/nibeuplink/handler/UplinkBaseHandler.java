@@ -27,7 +27,7 @@ import org.eclipse.smarthome.core.types.Command;
 import org.eclipse.smarthome.core.types.RefreshType;
 import org.eclipse.smarthome.core.types.State;
 import org.openhab.binding.nibeuplink.config.NibeUplinkConfiguration;
-import org.openhab.binding.nibeuplink.internal.AtomicReferenceUtils;
+import org.openhab.binding.nibeuplink.internal.AtomicReferenceTrait;
 import org.openhab.binding.nibeuplink.internal.command.UpdateSetting;
 import org.openhab.binding.nibeuplink.internal.connector.UplinkWebInterface;
 import org.openhab.binding.nibeuplink.internal.model.Channel;
@@ -42,23 +42,13 @@ import org.slf4j.LoggerFactory;
  * @author Alexander Friese - initial contribution
  */
 @NonNullByDefault
-public abstract class UplinkBaseHandler extends BaseThingHandler implements NibeUplinkHandler, AtomicReferenceUtils {
+public abstract class UplinkBaseHandler extends BaseThingHandler implements NibeUplinkHandler, AtomicReferenceTrait {
     private final Logger logger = LoggerFactory.getLogger(UplinkBaseHandler.class);
 
     private final long POLLING_INITIAL_DELAY = 30;
     private final long HOUSE_KEEPING_INITIAL_DELAY = 300;
 
     private Set<Channel> deadChannels = new HashSet<>(100);
-
-    /**
-     * Refresh interval which is used to poll values from the NibeUplink web interface (optional, defaults to 60 s)
-     */
-    private int refreshInterval;
-
-    /**
-     * Refresh interval which is used clean the dead channel list (optional, defaults to 1 h)
-     */
-    private int houseKeepingInterval = 1;
 
     /**
      * Interface object for querying the NibeUplink web interface
@@ -77,7 +67,7 @@ public abstract class UplinkBaseHandler extends BaseThingHandler implements Nibe
 
     public UplinkBaseHandler(Thing thing, HttpClient httpClient) {
         super(thing);
-        this.webInterface = new UplinkWebInterface(getConfiguration(), scheduler, this, httpClient);
+        this.webInterface = new UplinkWebInterface(scheduler, this, httpClient);
         this.pollingJobReference = new AtomicReference<@Nullable Future<?>>(null);
         this.deadChannelHouseKeepingReference = new AtomicReference<@Nullable Future<?>>(null);
     }
@@ -101,8 +91,6 @@ public abstract class UplinkBaseHandler extends BaseThingHandler implements Nibe
         logger.debug("NibeUplink initialized with configuration: {}", config);
 
         setupCustomChannels(config);
-        this.refreshInterval = config.getPollingInterval();
-        this.houseKeepingInterval = config.getHouseKeepingInterval();
 
         startPolling();
         webInterface.start();
@@ -130,9 +118,9 @@ public abstract class UplinkBaseHandler extends BaseThingHandler implements Nibe
      */
     private void startPolling() {
         updateJobReference(pollingJobReference, scheduler.scheduleWithFixedDelay(new UplinkPolling(this),
-                POLLING_INITIAL_DELAY, refreshInterval, TimeUnit.SECONDS));
+                POLLING_INITIAL_DELAY, getConfiguration().getPollingInterval(), TimeUnit.SECONDS));
         updateJobReference(deadChannelHouseKeepingReference, scheduler.scheduleWithFixedDelay(deadChannels::clear,
-                HOUSE_KEEPING_INITIAL_DELAY, houseKeepingInterval, TimeUnit.SECONDS));
+                HOUSE_KEEPING_INITIAL_DELAY, getConfiguration().getHouseKeepingInterval(), TimeUnit.SECONDS));
     }
 
     /**

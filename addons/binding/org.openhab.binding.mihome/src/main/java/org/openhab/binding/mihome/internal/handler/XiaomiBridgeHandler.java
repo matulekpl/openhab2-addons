@@ -297,13 +297,18 @@ public class XiaomiBridgeHandler extends ConfigStatusBridgeHandler implements Xi
                 new Object[] { itemId, createDataJsonString(keys, values) });
     }
 
+    void writeToDevice(String itemId, String command) {
+        sendCommandToBridge("write", new String[] { "sid", "data" },
+                new Object[] { itemId, "{" + command + ", \\\"key\\\": \\\"" + getEncryptedKey() + "\"}" });
+    }
+
     void writeToBridge(String[] keys, Object[] values) {
         sendCommandToBridge("write", new String[] { "model", "sid", "short_id", "data" },
                 new Object[] { "gateway", getGatewaySid(), "0", createDataJsonString(keys, values) });
     }
 
     private String createDataJsonString(String[] keys, Object[] values) {
-        return "{" + createDataString(keys, values) + ", \\\"key\\\": \\\"" + getEncryptedKey() + "\"}";
+        return "{" + createDataString(keys, values) + ", \\\"key\\\": \\\"" + getEncryptedKey() + "\\\"}";
     }
 
     private String getGatewaySid() {

@@ -151,7 +151,7 @@ public class ModbusDataHandlerTest extends JavaTest {
             if (item == null) {
                 throw new ItemNotFoundException(name);
             }
-            return super.get(name);
+            return item;
         }
 
         @Override
@@ -778,7 +778,7 @@ public class ModbusDataHandlerTest extends JavaTest {
                 // Not linking items and channels
                 false);
 
-        assertSingleStateUpdate(dataHandler, CHANNEL_LAST_READ_SUCCESS, is(notNullValue(State.class)));
+        assertSingleStateUpdate(dataHandler, CHANNEL_LAST_READ_SUCCESS, is(nullValue(State.class)));
         assertSingleStateUpdate(dataHandler, CHANNEL_LAST_READ_ERROR, is(nullValue(State.class)));
 
         // Since channles are not linked, they are not updated (are null)

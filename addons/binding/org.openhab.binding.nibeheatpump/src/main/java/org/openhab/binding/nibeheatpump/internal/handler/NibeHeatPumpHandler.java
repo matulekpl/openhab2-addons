@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import org.eclipse.smarthome.core.library.types.DecimalType;
 import org.eclipse.smarthome.core.library.types.OnOffType;
@@ -81,6 +82,8 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
     private final List<Integer> itemsToEnableWrite = new ArrayList<>();
 
     private final Map<Integer, CacheObject> stateMap = Collections.synchronizedMap(new HashMap<Integer, CacheObject>());
+
+    private long lastUpdateTime = 0;
 
     protected class CacheObject {
 
@@ -192,7 +195,10 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
         // Add channel to polling loop
         int coilAddress = parseCoilAddressFromChannelUID(channelUID);
         synchronized (itemsToPoll) {
-            itemsToPoll.add(coilAddress);
+            if (!itemsToPoll.contains(coilAddress)) {
+                logger.debug("New channel '{}' found, register '{}'", channelUID.getAsString(), coilAddress);
+                itemsToPoll.add(coilAddress);
+            }
         }
         clearCache(coilAddress);
     }
@@ -231,6 +237,15 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, description);
             return;
         }
+
+        itemsToPoll.clear();
+        itemsToPoll.addAll(this.getThing().getChannels().stream().filter(c -> isLinked(c.getUID())).map(c -> {
+            int coilAddress = parseCoilAddressFromChannelUID(c.getUID());
+            logger.debug("Linked channel '{}' found, register '{}'", c.getUID().getAsString(), coilAddress);
+            return coilAddress;
+        }).filter(c -> c != 0).collect(Collectors.toSet()));
+
+        logger.debug("Linked registers {}: {}", itemsToPoll.size(), itemsToPoll);
 
         clearCache();
 
@@ -422,6 +437,7 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
 
     private void clearCache() {
         stateMap.clear();
+        lastUpdateTime = 0;
     }
 
     private void clearCache(int coilAddress) {
@@ -481,11 +497,25 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
     }
 
     private void handleDataReadOutMessage(ModbusDataReadOutMessage msg) {
-        List<ModbusValue> regValues = msg.getValues();
+        boolean parse = true;
 
-        if (regValues != null) {
-            for (ModbusValue val : regValues) {
-                handleVariableUpdate(pumpModel, val);
+        logger.debug("Received data read out message");
+        if (configuration.throttleTime > 0) {
+            if ((lastUpdateTime + configuration.throttleTime) > System.currentTimeMillis()) {
+                logger.debug("Skipping data read out message parsing");
+                parse = false;
+            }
+        }
+
+        if (parse) {
+            logger.debug("Parsing data read out message");
+            lastUpdateTime = System.currentTimeMillis();
+            List<ModbusValue> regValues = msg.getValues();
+
+            if (regValues != null) {
+                for (ModbusValue val : regValues) {
+                    handleVariableUpdate(pumpModel, val);
+                }
             }
         }
     }

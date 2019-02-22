@@ -8,6 +8,7 @@
  */
 package org.openhab.binding.kodi.internal.protocol;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.eclipse.smarthome.core.cache.ExpiringCacheMap;
 import org.eclipse.smarthome.core.library.types.RawType;
 import org.eclipse.smarthome.io.net.http.HttpUtil;
@@ -31,6 +33,7 @@ import org.openhab.binding.kodi.internal.model.KodiDuration;
 import org.openhab.binding.kodi.internal.model.KodiFavorite;
 import org.openhab.binding.kodi.internal.model.KodiPVRChannel;
 import org.openhab.binding.kodi.internal.model.KodiPVRChannelGroup;
+import org.openhab.binding.kodi.internal.model.KodiSystemProperties;
 import org.openhab.binding.kodi.internal.model.KodiVideoStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,11 +55,18 @@ import com.google.gson.JsonSyntaxException;
  */
 public class KodiConnection implements KodiClientSocketEventListener {
 
+    private static final String PROPERTY_VERSION = "version";
+    private static final String PROPERTY_VOLUME = "volume";
+    private static final String PROPERTY_MUTED = "muted";
     private static final String PROPERTY_TOTALTIME = "totaltime";
     private static final String PROPERTY_TIME = "time";
     private static final String PROPERTY_PERCENTAGE = "percentage";
     private static final String PROPERTY_CURRENTVIDEOSTREAM = "currentvideostream";
     private static final String PROPERTY_CURRENTAUDIOSTREAM = "currentaudiostream";
+    private static final String PROPERTY_CANHIBERNATE = "canhibernate";
+    private static final String PROPERTY_CANREBOOT = "canreboot";
+    private static final String PROPERTY_CANSHUTDOWN = "canshutdown";
+    private static final String PROPERTY_CANSUSPEND = "cansuspend";
 
     private final Logger logger = LoggerFactory.getLogger(KodiConnection.class);
 
@@ -81,9 +91,11 @@ public class KodiConnection implements KodiClientSocketEventListener {
     private KodiPlaylistState currentPlaylistState = KodiPlaylistState.CLEAR;
 
     private final KodiEventListener listener;
+    private final WebSocketClient webSocketClient;
 
-    public KodiConnection(KodiEventListener listener) {
+    public KodiConnection(KodiEventListener listener, WebSocketClient webSocketClient) {
         this.listener = listener;
+        this.webSocketClient = webSocketClient;
     }
 
     @Override
@@ -102,7 +114,7 @@ public class KodiConnection implements KodiClientSocketEventListener {
         try {
             close();
             wsUri = new URI("ws", null, hostname, port, "/jsonrpc", null, null);
-            socket = new KodiClientSocket(this, wsUri, scheduler);
+            socket = new KodiClientSocket(this, wsUri, scheduler, webSocketClient);
             checkConnection();
         } catch (URISyntaxException e) {
             logger.error("exception during constructing URI host={}, port={}", hostname, port, e);
@@ -396,7 +408,7 @@ public class KodiConnection implements KodiClientSocketEventListener {
 
     private void setVolumeInternal(int volume) {
         JsonObject params = new JsonObject();
-        params.addProperty("volume", volume);
+        params.addProperty(PROPERTY_VOLUME, volume);
         socket.callMethod("Application.SetVolume", params);
     }
 
@@ -638,7 +650,7 @@ public class KodiConnection implements KodiClientSocketEventListener {
         return null;
     }
 
-    private RawType downloadImage(String url) {
+    private @Nullable RawType downloadImage(String url) {
         if (StringUtils.isNotEmpty(url)) {
             RawType image = IMAGE_CACHE.putIfAbsentAndGet(url, () -> {
                 logger.debug("Trying to download the content of URL {}", url);
@@ -760,12 +772,12 @@ public class KodiConnection implements KodiClientSocketEventListener {
         if ("Application.OnVolumeChanged".equals(method)) {
             // get the player id and make a new request for the media details
             JsonObject data = json.get("data").getAsJsonObject();
-            if (data.has("volume")) {
-                volume = data.get("volume").getAsInt();
+            if (data.has(PROPERTY_VOLUME)) {
+                volume = data.get(PROPERTY_VOLUME).getAsInt();
                 listener.updateVolume(volume);
             }
-            if (data.has("muted")) {
-                boolean muted = data.get("muted").getAsBoolean();
+            if (data.has(PROPERTY_MUTED)) {
+                boolean muted = data.get(PROPERTY_MUTED).getAsBoolean();
                 listener.updateMuted(muted);
             }
         } else {
@@ -816,9 +828,9 @@ public class KodiConnection implements KodiClientSocketEventListener {
         }
     }
 
-    public synchronized void updateVolume() {
+    public void updateVolume() {
         if (socket.isConnected()) {
-            String[] props = { "volume", "version", "name", "muted" };
+            String[] props = { PROPERTY_VOLUME, PROPERTY_MUTED };
 
             JsonObject params = new JsonObject();
             params.add("properties", getJsonArray(props));
@@ -826,12 +838,12 @@ public class KodiConnection implements KodiClientSocketEventListener {
 
             if (response instanceof JsonObject) {
                 JsonObject data = response.getAsJsonObject();
-                if (data.has("volume")) {
-                    volume = data.get("volume").getAsInt();
+                if (data.has(PROPERTY_VOLUME)) {
+                    volume = data.get(PROPERTY_VOLUME).getAsInt();
                     listener.updateVolume(volume);
                 }
-                if (data.has("muted")) {
-                    boolean muted = data.get("muted").getAsBoolean();
+                if (data.has(PROPERTY_MUTED)) {
+                    boolean muted = data.get(PROPERTY_MUTED).getAsBoolean();
                     listener.updateMuted(muted);
                 }
             }
@@ -952,14 +964,13 @@ public class KodiConnection implements KodiClientSocketEventListener {
             try {
                 socket.open();
                 return socket.isConnected();
-            } catch (Exception e) {
+            } catch (IOException e) {
                 logger.error("exception during connect to {}", wsUri, e);
                 socket.close();
                 return false;
             }
         } else {
-            // Ping Kodi with the get version command. This prevents the idle
-            // timeout on the websocket.
+            // Ping Kodi with the get version command. This prevents the idle timeout on the web socket.
             return !getVersion().isEmpty();
         }
     }
@@ -970,7 +981,7 @@ public class KodiConnection implements KodiClientSocketEventListener {
 
     public String getVersion() {
         if (socket.isConnected()) {
-            String[] props = { "version", "name" };
+            String[] props = { PROPERTY_VERSION };
 
             JsonObject params = new JsonObject();
             params.add("properties", getJsonArray(props));
@@ -978,8 +989,8 @@ public class KodiConnection implements KodiClientSocketEventListener {
 
             if (response instanceof JsonObject) {
                 JsonObject result = response.getAsJsonObject();
-                if (result.has("version")) {
-                    JsonObject version = result.get("version").getAsJsonObject();
+                if (result.has(PROPERTY_VERSION)) {
+                    JsonObject version = result.get(PROPERTY_VERSION).getAsJsonObject();
                     int major = version.get("major").getAsInt();
                     int minor = version.get("minor").getAsInt();
                     String revision = version.get("revision").getAsString();
@@ -1004,6 +1015,29 @@ public class KodiConnection implements KodiClientSocketEventListener {
         JsonObject params = new JsonObject();
         params.addProperty("action", action);
         socket.callMethod("Input.ExecuteAction", params);
+    }
+
+    public void getSystemProperties() {
+        KodiSystemProperties systemProperties = null;
+        if (socket.isConnected()) {
+            String[] props = { PROPERTY_CANHIBERNATE, PROPERTY_CANREBOOT, PROPERTY_CANSHUTDOWN, PROPERTY_CANSUSPEND };
+
+            JsonObject params = new JsonObject();
+            params.add("properties", getJsonArray(props));
+            JsonElement response = socket.callMethod("System.GetProperties", params);
+
+            try {
+                systemProperties = gson.fromJson(response, KodiSystemProperties.class);
+            } catch (JsonSyntaxException e) {
+                // do nothing
+            }
+        }
+        listener.updateSystemProperties(systemProperties);
+    }
+
+    public void sendApplicationQuit() {
+        String method = "Application.Quit";
+        socket.callMethod(method);
     }
 
     public void sendSystemCommand(String command) {

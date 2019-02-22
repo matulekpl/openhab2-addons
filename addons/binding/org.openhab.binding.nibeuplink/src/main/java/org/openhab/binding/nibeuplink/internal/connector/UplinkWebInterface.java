@@ -8,6 +8,8 @@
  */
 package org.openhab.binding.nibeuplink.internal.connector;
 
+import static org.openhab.binding.nibeuplink.NibeUplinkBindingConstants.*;
+
 import java.io.UnsupportedEncodingException;
 import java.util.Queue;
 import java.util.concurrent.Future;
@@ -18,13 +20,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
-import org.eclipse.jetty.http.HttpStatus.Code;
 import org.eclipse.jetty.util.BlockingArrayQueue;
 import org.eclipse.smarthome.core.thing.ThingStatus;
 import org.eclipse.smarthome.core.thing.ThingStatusDetail;
 import org.openhab.binding.nibeuplink.config.NibeUplinkConfiguration;
 import org.openhab.binding.nibeuplink.handler.NibeUplinkHandler;
-import org.openhab.binding.nibeuplink.internal.AtomicReferenceUtils;
+import org.openhab.binding.nibeuplink.internal.AtomicReferenceTrait;
 import org.openhab.binding.nibeuplink.internal.command.Login;
 import org.openhab.binding.nibeuplink.internal.command.NibeUplinkCommand;
 import org.slf4j.Logger;
@@ -36,21 +37,19 @@ import org.slf4j.LoggerFactory;
  * @author Alexander Friese - initial contribution
  */
 @NonNullByDefault
-public class UplinkWebInterface implements AtomicReferenceUtils {
+public class UplinkWebInterface implements AtomicReferenceTrait {
 
-    private static final long REQUEST_INITIAL_DELAY = 30000;
-    private static final long REQUEST_INTERVAL = 5000;
+    private final static int NIBE_ID_THRESHOLD = 10;
 
     private final Logger logger = LoggerFactory.getLogger(UplinkWebInterface.class);
 
     /**
-     * Configuration of the bridge from
-     * {@link org.openhab.BoxHandler.fritzaha.handler.FritzAhaBridgeHandler}
+     * Configuration
      */
-    private final NibeUplinkConfiguration config;
+    private NibeUplinkConfiguration config;
 
     /**
-     * Bridge thing handler for updating thing status
+     * handler for updating thing status
      */
     private final NibeUplinkHandler uplinkHandler;
 
@@ -98,7 +97,7 @@ public class UplinkWebInterface implements AtomicReferenceUtils {
          * constructor
          */
         WebRequestExecutor() {
-            this.commandQueue = new BlockingArrayQueue<>(20);
+            this.commandQueue = new BlockingArrayQueue<>(WEB_REQUEST_QUEUE_MAX_SIZE);
         }
 
         /**
@@ -107,7 +106,16 @@ public class UplinkWebInterface implements AtomicReferenceUtils {
          * @param command the command which will be queued
          */
         void enqueue(NibeUplinkCommand command) {
-            commandQueue.add(command);
+            try {
+                commandQueue.add(command);
+            } catch (IllegalStateException ex) {
+                if (commandQueue.size() >= WEB_REQUEST_QUEUE_MAX_SIZE) {
+                    logger.debug(
+                            "Could not add command to command queue because queue is already full. Maybe NIBE Uplink is down?");
+                } else {
+                    logger.warn("Could not add command to queue - IllegalStateException");
+                }
+            }
         }
 
         /**
@@ -123,16 +131,26 @@ public class UplinkWebInterface implements AtomicReferenceUtils {
                 StatusUpdateListener statusUpdater = new StatusUpdateListener() {
                     @Override
                     public void update(CommunicationStatus status) {
-                        if (Code.SERVICE_UNAVAILABLE.equals(status.getHttpCode())) {
-                            uplinkHandler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
-                                    status.getMessage());
-                            setAuthenticated(false);
-                        } else if (!Code.OK.equals(status.getHttpCode())) {
-                            uplinkHandler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                                    status.getMessage());
-                            setAuthenticated(false);
-                        }
+                        switch (status.getHttpCode()) {
+                            case SERVICE_UNAVAILABLE:
+                                uplinkHandler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
+                                        status.getMessage());
+                                setAuthenticated(false);
+                                break;
+                            case FOUND:
+                                uplinkHandler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                                        "most likely your NibeId is wrong. please check your NibeId.");
+                                setAuthenticated(false);
+                                break;
+                            case OK:
+                                // no action needed as the thing is already online.
+                                break;
+                            default:
+                                uplinkHandler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                                        status.getMessage());
+                                setAuthenticated(false);
 
+                        }
                     }
                 };
 
@@ -149,9 +167,8 @@ public class UplinkWebInterface implements AtomicReferenceUtils {
      *
      * @param config the Bridge configuration
      */
-    public UplinkWebInterface(NibeUplinkConfiguration config, ScheduledExecutorService scheduler,
-            NibeUplinkHandler handler, HttpClient httpClient) {
-        this.config = config;
+    public UplinkWebInterface(ScheduledExecutorService scheduler, NibeUplinkHandler handler, HttpClient httpClient) {
+        this.config = handler.getConfiguration();
         this.uplinkHandler = handler;
         this.scheduler = scheduler;
         this.requestExecutor = new WebRequestExecutor();
@@ -162,8 +179,9 @@ public class UplinkWebInterface implements AtomicReferenceUtils {
      * starts the periodic request executor job which handles all web requests
      */
     public void start() {
+        this.config = uplinkHandler.getConfiguration();
         updateJobReference(requestExecutorJobReference, scheduler.scheduleWithFixedDelay(requestExecutor,
-                REQUEST_INITIAL_DELAY, REQUEST_INTERVAL, TimeUnit.MILLISECONDS));
+                WEB_REQUEST_INITIAL_DELAY, WEB_REQUEST_INTERVAL, TimeUnit.MILLISECONDS));
     }
 
     /**
@@ -189,23 +207,26 @@ public class UplinkWebInterface implements AtomicReferenceUtils {
 
                 @Override
                 public void update(CommunicationStatus status) {
-                    if (Code.FOUND.equals(status.getHttpCode())) {
-                        uplinkHandler.setStatusInfo(ThingStatus.ONLINE, ThingStatusDetail.NONE, "logged in");
-                        setAuthenticated(true);
-                    } else if (Code.OK.equals(status.getHttpCode())) {
-                        uplinkHandler.setStatusInfo(ThingStatus.UNKNOWN, ThingStatusDetail.CONFIGURATION_ERROR,
-                                "invalid username or password");
-                        setAuthenticated(false);
-                    } else if (Code.SERVICE_UNAVAILABLE.equals(status.getHttpCode())) {
-                        uplinkHandler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
-                                status.getMessage());
-                        setAuthenticated(false);
-                    } else {
-                        uplinkHandler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                                status.getMessage());
-                        setAuthenticated(false);
+                    switch (status.getHttpCode()) {
+                        case FOUND:
+                            uplinkHandler.setStatusInfo(ThingStatus.ONLINE, ThingStatusDetail.NONE, "logged in");
+                            setAuthenticated(true);
+                            break;
+                        case OK:
+                            uplinkHandler.setStatusInfo(ThingStatus.UNKNOWN, ThingStatusDetail.CONFIGURATION_ERROR,
+                                    "invalid username or password");
+                            setAuthenticated(false);
+                            break;
+                        case SERVICE_UNAVAILABLE:
+                            uplinkHandler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
+                                    status.getMessage());
+                            setAuthenticated(false);
+                            break;
+                        default:
+                            uplinkHandler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                                    status.getMessage());
+                            setAuthenticated(false);
                     }
-
                 }
             };
 
@@ -220,9 +241,9 @@ public class UplinkWebInterface implements AtomicReferenceUtils {
      */
     private boolean preCheck() {
         String preCheckStatusMessage = "";
-        String localPassword = this.config.getPassword();
-        String localUser = this.config.getUser();
-        String localNibeId = this.config.getNibeId();
+        String localPassword = config.getPassword();
+        String localUser = config.getUser();
+        String localNibeId = config.getNibeId();
 
         if (localPassword == null || localPassword.isEmpty()) {
             preCheckStatusMessage = "please configure password first";
@@ -230,6 +251,8 @@ public class UplinkWebInterface implements AtomicReferenceUtils {
             preCheckStatusMessage = "please configure user first";
         } else if (localNibeId == null || localNibeId.isEmpty()) {
             preCheckStatusMessage = "please configure nibeId first";
+        } else if (localNibeId.length() > NIBE_ID_THRESHOLD) {
+            preCheckStatusMessage = "your NibeId is too long. Please refer to the documentation on how to set this value.";
         } else {
             return true;
         }

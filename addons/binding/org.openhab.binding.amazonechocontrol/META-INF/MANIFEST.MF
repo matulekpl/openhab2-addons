@@ -1,13 +1,13 @@
 Manifest-Version: 1.0
 Automatic-Module-Name: org.openhab.binding.amazonechocontrol
 Bundle-ActivationPolicy: lazy
-Bundle-ClassPath: .,lib/jsoup-1.10.1.jar
+Bundle-ClassPath: .
 Bundle-ManifestVersion: 2
 Bundle-Name: Amazon Echo Control Binding
 Bundle-SymbolicName: org.openhab.binding.amazonechocontrol;singleton:=true
 Bundle-RequiredExecutionEnvironment: JavaSE-1.8
 Bundle-Vendor: openHAB
-Bundle-Version: 2.4.0.qualifier
+Bundle-Version: 2.5.0.qualifier
 Import-Package: com.google.gson,
  javax.measure,
  javax.measure.quantity,

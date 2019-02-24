@@ -14,6 +14,7 @@ package org.openhab.binding.samsungtv.internal.protocol;
 
 import java.util.stream.Collectors;
 
+import org.openhab.binding.samsungtv.internal.config.SamsungTvConfiguration;
 import org.openhab.binding.samsungtv.internal.protocol.RemoteControllerWebSocket.App;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +40,9 @@ class WebSocketRemote extends WebSocketBase {
         static class Data {
             String update_type;
             App[] data;
+
+            String id;
+            String token;
         };
 
         Data data;
@@ -78,7 +82,11 @@ class WebSocketRemote extends WebSocketBase {
             JSONMessage jsonMsg = remoteControllerWebSocket.gson.fromJson(msg, JSONMessage.class);
             switch (jsonMsg.event) {
                 case "ms.channel.connect":
-                    logger.debug("Remote channel connected");
+                    logger.debug("Remote channel connected. Token = {}", jsonMsg.data.token);
+                    if (jsonMsg.data.token != null) {
+                        this.remoteControllerWebSocket.callback.putConfig(SamsungTvConfiguration.WEBSOCKET_TOKEN,
+                                jsonMsg.data.token);
+                    }
                     getApps();
                     break;
                 case "ms.channel.clientConnect":

@@ -14,9 +14,15 @@ package org.openhab.binding.samsungtv.internal.service;
 
 import static org.openhab.binding.samsungtv.internal.SamsungTvBindingConstants.*;
 
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -26,6 +32,7 @@ import org.eclipse.smarthome.core.library.types.StringType;
 import org.eclipse.smarthome.core.library.types.UpDownType;
 import org.eclipse.smarthome.core.thing.ThingStatusDetail;
 import org.eclipse.smarthome.core.types.Command;
+import org.openhab.binding.samsungtv.internal.config.SamsungTvConfiguration;
 import org.openhab.binding.samsungtv.internal.protocol.KeyCode;
 import org.openhab.binding.samsungtv.internal.protocol.RemoteController;
 import org.openhab.binding.samsungtv.internal.protocol.RemoteControllerException;
@@ -36,6 +43,8 @@ import org.openhab.binding.samsungtv.internal.service.api.EventListener;
 import org.openhab.binding.samsungtv.internal.service.api.SamsungTvService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.gson.Gson;
 
 /**
  * The {@link RemoteControllerService} is responsible for handling remote
@@ -65,6 +74,76 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
     private boolean artModeSupported = false;
 
     private Set<EventListener> listeners = new CopyOnWriteArraySet<>();
+
+    private RemoteController remoteController = null;
+
+    /** Path for the information endpoint (note the final slash!) */
+    private final static String WS_ENDPOINT_V2 = "/api/v2/";
+
+    /** Description of the json returned for the information endpoint */
+    static class TVProperties {
+        static class Device {
+            boolean FrameTVSupport;
+            boolean GamePadSupport;
+            boolean ImeSyncedSupport;
+            String OS;
+            boolean TokenAuthSupport;
+            boolean VoiceSupport;
+            String countryCode;
+            String description;
+            String firmwareVersion;
+            String modelName;
+            String name;
+            String networkType;
+            String resolution;
+        }
+
+        Device device;
+        String isSupport;
+    }
+
+    /**
+     * Discover the type of remote control service the TV supports.
+     *
+     * @param hostname
+     * @return map with properties containing at least the protocol and port
+     */
+    public static Map<String, Object> discover(String hostname) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            RemoteControllerLegacy remoteController = new RemoteControllerLegacy(hostname,
+                    SamsungTvConfiguration.PORT_DEFAULT_LEGACY, "openHAB", "openHAB");
+            remoteController.openConnection();
+            remoteController.closeConnection();
+            result.put(SamsungTvConfiguration.PROTOCOL, SamsungTvConfiguration.PROTOCOL_LEGACY);
+            result.put(SamsungTvConfiguration.PORT, SamsungTvConfiguration.PORT_DEFAULT_LEGACY);
+            return result;
+        } catch (RemoteControllerException e) {
+            // ignore error
+        }
+
+        URI uri;
+        try {
+            uri = new URI("http", null, hostname, SamsungTvConfiguration.PORT_DEFAULT_WEBSOCKET, WS_ENDPOINT_V2, null,
+                    null);
+            InputStreamReader reader = new InputStreamReader(uri.toURL().openStream());
+            TVProperties properties = new Gson().fromJson(reader, TVProperties.class);
+
+            if (properties.device.TokenAuthSupport) {
+                result.put(SamsungTvConfiguration.PROTOCOL, SamsungTvConfiguration.PROTOCOL_SECUREWEBSOCKET);
+                result.put(SamsungTvConfiguration.PORT, SamsungTvConfiguration.PORT_DEFAULT_SECUREWEBSOCKET);
+            } else {
+                result.put(SamsungTvConfiguration.PROTOCOL, SamsungTvConfiguration.PROTOCOL_WEBSOCKET);
+                result.put(SamsungTvConfiguration.PORT, SamsungTvConfiguration.PORT_DEFAULT_WEBSOCKET);
+            }
+        } catch (URISyntaxException | IOException e) {
+            LoggerFactory.getLogger(RemoteControllerService.class).debug("Cannot retrieve info from TV", e);
+            result.put(SamsungTvConfiguration.PROTOCOL, SamsungTvConfiguration.PROTOCOL_NONE);
+        }
+
+        return result;
+    }
 
     private RemoteControllerService(String host, int port, boolean upnp) {
         logger.debug("Create a Samsung TV RemoteController service: " + upnp);
@@ -106,8 +185,6 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
         return remoteController != null;
     }
 
-    RemoteController remoteController = null;
-
     @Override
     public void start() {
         if (remoteController != null) {
@@ -119,30 +196,23 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
             return;
         }
 
-        // first try legacy interface
-        try {
-            RemoteController remoteLegacy = new RemoteControllerLegacy(host, port, "openHAB", "openHAB");
-            remoteLegacy.openConnection();
-            // will not reach this if exception thrown in openConnection
-            remoteController = remoteLegacy;
-            logger.info("Using legacy remote interface");
-            artModeSupported = false;
-        } catch (RemoteControllerException ignore) {
-        }
+        String protocol = (String) getConfig(SamsungTvConfiguration.PROTOCOL);
+        logger.info("Using {} interface", protocol);
 
-        // then try websocket: may give timeout
-        try {
-            RemoteController remoteWebSocket = new RemoteControllerWebSocket(host, 8001, "openHAB", "openHAB", this);
-            remoteWebSocket.openConnection();
-            // will not reach this if exception thrown in openConnection
-            remoteController = remoteWebSocket;
-            logger.info("Using websocket remote interface");
+        if (SamsungTvConfiguration.PROTOCOL_LEGACY.equals(protocol)) {
+            remoteController = null;
             return;
-        } catch (RemoteControllerException ignore) {
+        } else if (SamsungTvConfiguration.PROTOCOL_LEGACY.equals(protocol)) {
+            remoteController = new RemoteControllerLegacy(host, port, "openHAB", "openHAB");
+        } else {
+            remoteController = new RemoteControllerWebSocket(host, port, "openHAB", "openHAB", this);
         }
 
-        logger.info("No remote interface detected");
-        remoteController = null;
+        try {
+            remoteController.openConnection();
+        } catch (RemoteControllerException e) {
+            reportError("Cannot connect to remote control service", e);
+        }
     }
 
     @Override
@@ -410,4 +480,19 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
         return artModeSupported;
     }
 
+    @Override
+    public void putConfig(String key, Object value) {
+        for (EventListener listener : listeners) {
+            listener.putConfig(key, value);
+        }
+
+    }
+
+    @Override
+    public Object getConfig(String key) {
+        for (EventListener listener : listeners) {
+            return listener.getConfig(key);
+        }
+        return null;
+    }
 }

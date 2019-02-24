@@ -15,14 +15,18 @@ package org.openhab.binding.samsungtv.internal.protocol;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.util.component.LifeCycle.Listener;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
+import org.openhab.binding.samsungtv.internal.config.SamsungTvConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,8 +104,12 @@ public class RemoteControllerWebSocket extends RemoteController implements Liste
     public RemoteControllerWebSocket(String host, int port, String appName, String uniqueId,
             RemoteControllerWebsocketCallback remoteControllerWebsocketCallback) {
         super(host, port, appName, uniqueId);
-        this.client = new WebSocketClient();
-        this.client.addLifeCycleListener(this);
+
+        SslContextFactory sslContextFactory = new SslContextFactory();
+        sslContextFactory.setTrustAll(true); // The magic
+
+        client = new WebSocketClient(sslContextFactory);
+        client.addLifeCycleListener(this);
 
         this.callback = remoteControllerWebsocketCallback;
 
@@ -138,18 +146,33 @@ public class RemoteControllerWebSocket extends RemoteController implements Liste
     private void connectWebSockets() {
         logger.trace("connectWebSockets()");
 
+        String encodedAppName = Base64.getUrlEncoder().encodeToString(appName.getBytes());
+
+        String protocol;
+
+        if (SamsungTvConfiguration.PROTOCOL_SECUREWEBSOCKET
+                .equals(callback.getConfig(SamsungTvConfiguration.PROTOCOL))) {
+            protocol = "wss";
+        } else {
+            protocol = "ws";
+        }
+
         try {
-            webSocketRemote.connect(new URI("ws", null, host, port, WS_ENDPOINT_REMOTE_CONTROL, "name=openhab", null));
+            String token = (String) callback.getConfig(SamsungTvConfiguration.WEBSOCKET_TOKEN);
+            webSocketRemote.connect(new URI(protocol, null, host, port, WS_ENDPOINT_REMOTE_CONTROL,
+                    "name=" + encodedAppName + (StringUtil.isNotBlank(token) ? "&token=" + token : ""), null));
         } catch (RemoteControllerException | URISyntaxException e) {
             logger.warn("Problem connecting to remote websocket", e);
         }
+
         try {
-            webSocketArt.connect(new URI("ws", null, host, port, WS_ENDPOINT_ART, "name=openhab", null));
+            webSocketArt.connect(new URI(protocol, null, host, port, WS_ENDPOINT_ART, "name=" + encodedAppName, null));
         } catch (RemoteControllerException | URISyntaxException e) {
             logger.warn("Problem connecting to artmode websocket", e);
         }
+
         try {
-            webSocketV2.connect(new URI("ws", null, host, port, WS_ENDPOINT_V2, "name=openhab", null));
+            webSocketV2.connect(new URI(protocol, null, host, port, WS_ENDPOINT_V2, "name=" + encodedAppName, null));
         } catch (RemoteControllerException | URISyntaxException e) {
             logger.warn("Problem connecting to V2 websocket", e);
         }
@@ -336,7 +359,7 @@ public class RemoteControllerWebSocket extends RemoteController implements Liste
 
     @Override
     public void lifeCycleFailure(LifeCycle arg0, Throwable throwable) {
-        logger.warn("Problem creating websocket client", throwable);
+        logger.warn("WebSocketClient failure", throwable);
     }
 
     @Override

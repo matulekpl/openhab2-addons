@@ -89,14 +89,17 @@ class WebSocketBase extends WebSocketAdapter {
 
     void sendCommand(String cmd) {
         try {
-            // retry opening connection just in case
-            remoteControllerWebSocket.openConnection();
 
             if (isConnected()) {
                 getRemote().sendString(cmd);
                 logger.trace("{}: sendCommand: {}", this.getClass().getSimpleName(), cmd);
             } else {
                 logger.warn("{} sending command while socket not connected: {}", this.getClass().getSimpleName(), cmd);
+                // retry opening connection just in case
+                remoteControllerWebSocket.openConnection();
+
+                getRemote().sendString(cmd);
+                logger.trace("{}: sendCommand: {}", this.getClass().getSimpleName(), cmd);
             }
         } catch (Exception e) {
             logger.error("{}: cannot send command", this.getClass().getSimpleName(), e);

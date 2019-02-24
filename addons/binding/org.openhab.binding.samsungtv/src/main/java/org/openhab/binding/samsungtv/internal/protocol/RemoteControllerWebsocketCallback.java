@@ -29,4 +29,8 @@ public interface RemoteControllerWebsocketCallback {
     void powerUpdated(boolean on, boolean artmode);
 
     void connectionError(Throwable error);
+
+    void putConfig(String token, Object object);
+
+    Object getConfig(String token);
 }

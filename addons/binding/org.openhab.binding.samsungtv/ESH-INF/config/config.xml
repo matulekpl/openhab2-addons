@@ -5,6 +5,16 @@
 	xsi:schemaLocation="http://eclipse.org/smarthome/schemas/config-description/v1.0.0 http://eclipse.org/smarthome/schemas/config-description-1.0.0.xsd">
 
 	<config-description uri="thing-type:samsungtv:tv">
+		<parameter name="protocol" type="text" required="true">
+			<label>Protocol</label>
+			<description>Remote Control Protocol</description>
+			<options>
+				<option value="None">None</option>
+				<option value="Legacy">Legacy</option>
+				<option value="WebSocket">WebSocket</option>
+				<option value="SecureWebSocket">Secure WebSocket</option>
+			</options>
+		</parameter>
 		<parameter name="hostName" type="text" required="true">
 			<label>Host name</label>
 			<description>Network address of the Samsung TV.</description>
@@ -21,9 +31,13 @@
 		</parameter>
 		<parameter name="refreshInterval" type="integer" unit="ms">
 			<label>Refresh Interval</label>
-			<description>States how often a refresh shall occur in milliseconds.
-			</description>
+			<description>States how often a refresh shall occur in milliseconds.</description>
 			<default>1000</default>
+		</parameter>
+		<parameter name="webSocketToken" type="text" readOnly="false">
+			<label>Authentication Token</label>
+			<description>Security token for data exchange via secure websocket.</description>
+			<advanced>true</advanced>
 		</parameter>
 	</config-description>
 

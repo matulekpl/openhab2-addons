@@ -12,10 +12,10 @@
  */
 package org.openhab.binding.samsungtv.internal.protocol;
 
-import java.util.UUID;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.gson.JsonElement;
 
 /**
  * Websocket class to retrieve artmode status (on o.a. the Frame TV's)
@@ -40,9 +40,11 @@ class WebSocketArt extends WebSocketBase {
             String event;
             String status;
             String value;
+
         };
 
-        Data data;
+        // data is sometimes a json object, sometimes a string representation of a json object for d2d_service_message
+        JsonElement data;
     }
 
     @Override
@@ -54,7 +56,7 @@ class WebSocketArt extends WebSocketBase {
 
             switch (jsonMsg.event) {
                 case "ms.channel.connect":
-                    logger.debug("Art channel connected");
+                    logger.debug("Art channel connected.");
                     break;
                 case "ms.channel.ready":
                     logger.debug("Art channel ready");
@@ -68,10 +70,10 @@ class WebSocketArt extends WebSocketBase {
                     break;
 
                 case "d2d_service_message":
-                    if (jsonMsg.data == null || jsonMsg.data.event == null) {
+                    if (jsonMsg.data == null) {
                         logger.debug("Empty d2d_service_message event: {}", msg);
                     } else {
-                        handleD2DServiceMessage(msg, jsonMsg);
+                        handleD2DServiceMessage(jsonMsg.data.getAsString());
                     }
                     // ignore;
                     break;
@@ -84,19 +86,24 @@ class WebSocketArt extends WebSocketBase {
         }
     }
 
-    private void handleD2DServiceMessage(String msg, JSONMessage jsonMsg) {
-        switch (jsonMsg.data.event) {
+    private void handleD2DServiceMessage(String msg) {
+        JSONMessage.Data data = remoteControllerWebSocket.gson.fromJson(msg, JSONMessage.Data.class);
+        if (data.event == null) {
+            logger.debug("Unknown d2d_service_message event: {}", msg);
+            return;
+        }
+        switch (data.event) {
             case "art_mode_changed":
-                logger.debug("art_mode_changed: {}", jsonMsg.data.status);
-                if ("on".equals(jsonMsg.data.status)) {
+                logger.debug("art_mode_changed: {}", data.status);
+                if ("on".equals(data.status)) {
                     remoteControllerWebSocket.callback.powerUpdated(false, true);
                 } else {
                     remoteControllerWebSocket.callback.powerUpdated(true, false);
                 }
                 break;
             case "artmode_status":
-                logger.debug("artmode_status: {}", jsonMsg.data.value);
-                if ("on".equals(jsonMsg.data.value)) {
+                logger.debug("artmode_status: {}", data.value);
+                if ("on".equals(data.value)) {
                     remoteControllerWebSocket.callback.powerUpdated(false, true);
                 } else {
                     remoteControllerWebSocket.callback.powerUpdated(true, false);
@@ -116,21 +123,23 @@ class WebSocketArt extends WebSocketBase {
         }
     }
 
-    static class JSONArtModeStatus {
+    class JSONArtModeStatus {
 
-        public JSONArtModeStatus(UUID uuid) {
-            params.data.id = uuid.toString();
+        public JSONArtModeStatus() {
+            Params.Data data = params.new Data();
+            data.id = remoteControllerWebSocket.uuid.toString();
+            params.data = remoteControllerWebSocket.gson.toJson(data);
         }
 
-        static class Params {
-            static class Data {
+        class Params {
+            class Data {
                 String request = "get_artmode_status";
                 String id;
             }
 
             String event = "art_app_request";
             String to = "host";
-            Data data = new Data();
+            String data;
         }
 
         String method = "ms.channel.emit";
@@ -139,7 +148,7 @@ class WebSocketArt extends WebSocketBase {
     }
 
     void getArtmodeStatus() {
-        sendCommand(remoteControllerWebSocket.gson.toJson(new JSONArtModeStatus(remoteControllerWebSocket.uuid)));
+        sendCommand(remoteControllerWebSocket.gson.toJson(new JSONArtModeStatus()));
     }
 
 }

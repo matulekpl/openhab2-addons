@@ -416,4 +416,14 @@ public class SamsungTvHandler extends BaseThingHandler implements DiscoveryListe
         }, 1000, TimeUnit.MILLISECONDS);
     }
 
+    @Override
+    public void putConfig(String key, Object value) {
+        getConfig().put(key, value);
+    }
+
+    @Override
+    public Object getConfig(String key) {
+        return getConfig().get(key);
+    }
+
 }

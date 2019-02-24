@@ -43,7 +43,13 @@ class WebSocketV2 extends WebSocketBase {
             String visible;
         };
 
+        static class Data {
+            String id;
+            String token;
+        }
+
         Result result;
+        Data data;
     }
 
     @Override
@@ -55,6 +61,7 @@ class WebSocketV2 extends WebSocketBase {
 
             if (jsonMsg.result != null) {
                 handleResult(jsonMsg);
+                return;
             }
             if (jsonMsg.event == null) {
                 logger.debug("WebSocketV2 Unknown response format: {}", msg);
@@ -63,18 +70,19 @@ class WebSocketV2 extends WebSocketBase {
 
             switch (jsonMsg.event) {
                 case "ms.channel.connect":
-                    logger.debug("Remote channel connected");
+                    logger.debug("V2 channel connected. Token = {}", jsonMsg.data.token);
+
                     // update is requested from ed.installedApp.get event: small risk that this websocket is not
                     // yet connected
                     break;
                 case "ms.channel.clientConnect":
-                    logger.debug("Remote client connected");
+                    logger.debug("V2 client connected");
                     break;
                 case "ms.channel.clientDisconnect":
-                    logger.debug("Remote client disconnected");
+                    logger.debug("V2 client disconnected");
                     break;
                 default:
-                    logger.debug("WebSocketV2 Unknown event: {}", msg);
+                    logger.debug("V2 Unknown event: {}", msg);
 
             }
         } catch (Exception e) {
@@ -99,13 +107,12 @@ class WebSocketV2 extends WebSocketBase {
     static class JSONAppStatus {
 
         public JSONAppStatus(UUID uuid, String id) {
-            params.id = uuid.toString();
-            this.id = id;
+            this.id = uuid.toString();
+            params.id = id;
         }
 
         static class Params {
             String id;
-
         }
 
         String method = "ms.application.get";

@@ -146,7 +146,7 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
     }
 
     private RemoteControllerService(String host, int port, boolean upnp) {
-        logger.debug("Create a Samsung TV RemoteController service: " + upnp);
+        logger.debug("Creating a Samsung TV RemoteController service: " + upnp);
         this.upnp = upnp;
         this.host = host;
         this.port = port;
@@ -182,7 +182,11 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
     }
 
     public boolean checkConnection() {
-        return remoteController != null;
+        if (remoteController == null) {
+            return false;
+        } else {
+            return remoteController.isConnected();
+        }
     }
 
     @Override
@@ -199,7 +203,7 @@ public class RemoteControllerService implements SamsungTvService, RemoteControll
         String protocol = (String) getConfig(SamsungTvConfiguration.PROTOCOL);
         logger.info("Using {} interface", protocol);
 
-        if (SamsungTvConfiguration.PROTOCOL_LEGACY.equals(protocol)) {
+        if (SamsungTvConfiguration.PROTOCOL_NONE.equals(protocol)) {
             remoteController = null;
             return;
         } else if (SamsungTvConfiguration.PROTOCOL_LEGACY.equals(protocol)) {

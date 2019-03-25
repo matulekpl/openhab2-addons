@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
  * Websocket class to retrieve app status
  *
  * @author Arjan Mels - Initial contribution
- *
  */
 class WebSocketV2 extends WebSocketBase {
     private final Logger logger = LoggerFactory.getLogger(WebSocketV2.class);
@@ -86,7 +85,7 @@ class WebSocketV2 extends WebSocketBase {
 
             }
         } catch (Exception e) {
-            logger.error("{}: Error ({}) in message: {}", this.getClass().getSimpleName(), e.getMessage(), msg, e);
+            logger.warn("{}: Error ({}) in message: {}", this.getClass().getSimpleName(), e.getMessage(), msg, e);
         }
     }
 
